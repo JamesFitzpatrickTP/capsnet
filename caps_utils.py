@@ -11,6 +11,10 @@ def squash(vector, epsilon=1e-4):
     return prefactor * normed_vector
 
 
+def torch_tensor(shape):
+    return torch.tensor(np.random.randn(shape)).float()
+
+
 def convolve(in_maps, out_maps, kernel_size, stride=1, padding=1):
     return nn.Conv2d(
         in_channels=in_maps,
@@ -41,6 +45,33 @@ class ConvConv(nn.Module):
         return tensor
 
 
+class CapsLayer(nn.Module):
+    def __init__(self, in_dim=None, out_dim=None, in_num=None, out_num=None):
+        super(CapsLayer, self).__init__()
+
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.in_num = in_num
+        self.out_num = out_num
+
+        self.squash = squash
+
+    def flatten(self, tensor, dim):
+        batch_size = tensor.shape[0]
+        tensor = tensor.view(batch_size, -1, dim)
+        return tensor
+
+    def forward(self, tensor):
+        if self.in_dim is None:
+            tensor = self.flatten(tensor, self.out_dim)
+            print(tensor.shape)
+        else:
+            self.nums = self.in_num * self.out_num
+            self.weights = torch_tensor((self.in_dim, self.out_dim, self.out_num))
+            
+        return tensor
+    
+
 class CapsNet(nn.Module):
     def __init__(self, in_maps, out_maps, kernel_size, strides):
         super(CapsNet, self).__init__()
@@ -51,13 +82,12 @@ class CapsNet(nn.Module):
         self.strides = strides
 
         self.conv = ConvConv(self.in_maps, self.out_maps, self.kernel_size, self.strides)
-
-    def flatten(self, tensor):
-        batch_size = tensor.shape[0]
-        tensor = tensor.view(batch_size, -1, 8)
-        return tensor
-        
+        self.in_caps = CapsLayer(None, 8)
+        self.out_caps = CapsLayer(8, 16, 3, 2)
+                
     def forward(self, tensor):
         tensor = nn.functional.relu(self.conv(tensor))
-        tensor = self.flatten(tensor)
+        tensor = self.in_caps(tensor)
+        tensor = self.out_caps(tensor)
+                            
         return tensor
