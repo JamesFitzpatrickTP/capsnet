@@ -69,12 +69,24 @@ class Downsample(nn.Module):
     
 
 class InitialCaps():
-    def __init__(self, in_maps, out_maps, num_caps, ker_size):
-        super(InitialCaps, self).__init__():
+    def __init__(self, in_maps, out_maps, ker_size, num_caps):
+        super(InitialCaps, self).__init__()
 
         self.in_maps = in_maps
         self.out_maps = out_maps
-        self.num_caps = num_caps
         self.ker_size = ker_size
+        self.num_caps = num_caps
 
+        self.conv = Convolve(in_maps=self.in_maps,
+                             out_maps=self.out_maps,
+                             ker_size=self.ker_size,
+                             mode='same')
+
+    def forward(self, tensor):
+        return self.squash(self.conv(tensor))
         
+    def squash(self, tensor):
+        norm = torch.norm(tensor, dim=0)
+        numerator = (norm ** 2) * tensor
+        denominator = (1 + norm ** 2) * norm
+        return numerator / denominator
