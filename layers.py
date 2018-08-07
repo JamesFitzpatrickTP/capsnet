@@ -123,6 +123,15 @@ class DownCaps(nn.Module):
         tensors = torch.stack(tensors, dim=1)
         return torch.Tensor.squeeze(tensors)
 
+    def squash(self, tensor):
+        norm = torch.norm(tensor, dim=0)
+        numerator = (norm ** 2) * tensor
+        denominator = (1 + norm ** 2) * norm
+        return numerator / denominator
+
+    def routing(self, tensor):
+        pass
+
 
 def test_shape():
     x = torch.tensor(np.zeros((1, 1, 512, 512))).float()
