@@ -110,6 +110,9 @@ class DownCaps(nn.Module):
         self.num_routes = num_routes
         self.num_atoms = num_atoms
 
+        self.ker_height = 3
+        self.ker_width = 3
+
         self.convs = nn.ModuleList([
             Convolve(
                 in_maps=self.in_maps,
@@ -121,7 +124,7 @@ class DownCaps(nn.Module):
     def forward(self, tensor):
         tensors = [conv(tensor) for conv in self.convs]
         tensors = torch.stack(tensors, dim=1)
-        return torch.Tensor.squeeze(tensors)
+        tensors = torch.Tensor.squeeze(tensors)
 
     def squash(self, tensor):
         norm = torch.norm(tensor, dim=0)
@@ -129,8 +132,17 @@ class DownCaps(nn.Module):
         denominator = (1 + norm ** 2) * norm
         return numerator / denominator
 
-    def routing(self, tensor):
-        pass
+    def routing(self, tensor, tensors):
+        prev_dim, cur_dim = tensor.shape(1), tensors.shape(1)
+        prev_atoms = tensor.shape(0)
+        M = torch.randn(prev_atoms,
+                        self.num_atoms,
+                        self.ker_height,
+                        self.ker_width,
+                        prev_dim,
+                        cur_dim
+        )
+        
 
 
 def test_shape():
