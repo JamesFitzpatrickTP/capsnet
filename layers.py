@@ -3,6 +3,46 @@ import torch.nn as nn
 import torch.nn.functional as fn
 
 import numpy as np
+from functools import partial
+
+
+def axis_string(max_dims):
+    strings = (chr(97 + i) for i in range(max_dims))
+    string = ''.join(strings)
+    return string
+
+
+def index_string(string, indices):
+    string = np.array(list(string))
+    string = string[indices]
+    return ''.join(string)
+
+
+def ein_string(string, substring):
+    indices = [(substring[i] in string) for i in range(len(substring))]
+    indices = ~ np.array(indices).astype(bool)
+    indices = list(indices) + [True] * int(len(string) - len(substring))
+    indices = np.array(indices)
+    return index_string(string, indices)
+
+
+def parse_axes(string, axes):
+    np_axes = np.array(axes)
+    string_a = index_string(string, np_axes[:, 0]) 
+    string_b = index_string(string, np_axes[:, 1])
+    string_a = ein_string(string, string_a)
+    string_b = ein_string(string, string_b)
+    return string_a + string_b
+
+
+def tensordot(tensor, weights, axes):
+    max_dims = max(tensor.dim(), weights.dim())
+    string = axis_string(max_dims)
+    string_c = ''.join(sorted(set(parse_axes(string, axes))))
+    string_a, string_b = string[:tensor.dim()], string[:weights.dim()]
+    string = string_a + ',' + string_b + '->' + string_c
+    print(string)
+    return torch.einsum(string, (tensor, weights))
 
 
 def compute_padding(in_dim, out_dim, ker_size, stride):
@@ -125,6 +165,7 @@ class DownCaps(nn.Module):
         tensors = [conv(tensor) for conv in self.convs]
         tensors = torch.stack(tensors, dim=1)
         tensors = torch.Tensor.squeeze(tensors)
+        self.routing(tensor, tensors)
 
     def squash(self, tensor):
         norm = torch.norm(tensor, dim=0)
@@ -133,16 +174,14 @@ class DownCaps(nn.Module):
         return numerator / denominator
 
     def routing(self, tensor, tensors):
-        prev_dim, cur_dim = tensor.shape(1), tensors.shape(1)
-        prev_atoms = tensor.shape(0)
+        prev_dim, cur_dim = tensor.size(1), tensors.size(1)
+        prev_atoms = tensor.size(0)
         M = torch.randn(prev_atoms,
-                        self.num_atoms,
                         self.ker_height,
                         self.ker_width,
                         prev_dim,
-                        cur_dim
-        )
-        
+                        cur_dim,
+                        self.num_atoms)
 
 
 def test_shape():
@@ -154,40 +193,22 @@ def test_shape():
     return z
 
 
-def axis_string(max_dims):
-    strings = (chr(97 + i) for i in range(max_dims))
-    string = ''.join(strings)
-    return string
+def slice_tensor(tensor, i, j, ker_width):
+    slices = [slice(None)] * tensor.dim()
+    slices[-2] = slice(i, i + ker_width)
+    slices[-1] = slice(j, j + ker_width)
+    return(tensor[slices])
 
 
-def index_string(string, indices):
-    string = np.array(list(string))
-    string = string[indices]
-    return ''.join(string)
-
-
-def ein_string(string, substring):
-    indices = [(substring[i] in string) for i in range(len(substring))]
-    indices = ~ np.array(indices).astype(bool)
-    indices = list(indices) + [True] * int(len(string) - len(substring))
-    indices = np.array(indices)
-    return index_string(string, indices)
-
-
-def parse_axes(string, axes):
-    np_axes = np.array(axes)
-    string_a = index_string(string, np_axes[:, 0]) 
-    string_b = index_string(string, np_axes[:, 1])
-    string_a = ein_string(string, string_a)
-    string_b = ein_string(string, string_b)
-    return string_a + string_b
-
-
-def tensordot(tensor, weights, axes):
-    max_dims = max(tensor.dim(), weights.dim())
-    string = axis_string(max_dims)
-    string_c = ''.join(sorted(set(parse_axes(string, axes))))
-    string_a, string_b = string[:tensor.dim()], string[:weights.dim()]
-    string = string_a + ',' + string_b + '->' + string_c
-    return torch.einsum(string, (tensor, weights))
+def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2) 
+    tensor = fn.pad(tensor, padding, mode='constant')
+    rng = in_dim - ker_width + 1
+    test_tensor = slice_tensor(tensor, 0, 0, ker_width)
+    print(test_tensor.shape, weights.shape)
+    tensor_product = torch.einsum('abcd,dcbef->aef', (test_tensor, weights))
+    return tensor_product
+    
+    
     
