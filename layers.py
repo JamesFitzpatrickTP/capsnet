@@ -165,7 +165,8 @@ class DownCaps(nn.Module):
         tensors = [conv(tensor) for conv in self.convs]
         tensors = torch.stack(tensors, dim=1)
         tensors = torch.Tensor.squeeze(tensors)
-        self.routing(tensor, tensors)
+        votes, M = self.routing(tensor, tensors)
+        return votes
 
     def squash(self, tensor):
         norm = torch.norm(tensor, dim=0)
@@ -175,13 +176,14 @@ class DownCaps(nn.Module):
 
     def routing(self, tensor, tensors):
         prev_dim, cur_dim = tensor.size(1), tensors.size(1)
-        prev_atoms = tensor.size(0)
-        M = torch.randn(prev_atoms,
-                        self.ker_height,
+        M = torch.randn(self.ker_height,
                         self.ker_width,
                         prev_dim,
                         cur_dim,
                         self.num_atoms)
+        tensor = mat_conv(tensor, M, self.ker_width, self.stride,
+                          tensor.size(-1), tensor.size(-1) / self.stride)
+        return tensor, M
 
 
 def test_shape():
@@ -202,13 +204,16 @@ def slice_tensor(tensor, i, j, ker_width):
 
 def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2) 
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
     tensor = fn.pad(tensor, padding, mode='constant')
-    rng = in_dim - ker_width + 1
-    test_tensor = slice_tensor(tensor, 0, 0, ker_width)
-    print(test_tensor.shape, weights.shape)
-    tensor_product = torch.einsum('abcd,dcbef->aef', (test_tensor, weights))
-    return tensor_product
+    rng = in_dim - ker_width + 1 + 2 * pad    
+    tensor_product = torch.stack([torch.stack(
+        [torch.einsum('abcd,dcbef->aef',
+                      (slice_tensor(tensor, i, j, ker_width),
+                       weights)) for i in range(rng)])
+                                for j in range(rng)])
+    tensor_product = tensor_product.squeeze()
+    return tensor_product.transpose(0, 2).transpose(1, 3)
     
     
     
