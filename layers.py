@@ -152,3 +152,42 @@ def test_shape():
     operation_two = DownCaps(16, 16, 5, 'half', 2, 256 * 256, 1, 2)
     z = operation_two(y)
     return z
+
+
+def axis_string(max_dims):
+    strings = (chr(97 + i) for i in range(max_dims))
+    string = ''.join(strings)
+    return string
+
+
+def index_string(string, indices):
+    string = np.array(list(string))
+    string = string[indices]
+    return ''.join(string)
+
+
+def ein_string(string, substring):
+    indices = [(substring[i] in string) for i in range(len(substring))]
+    indices = ~ np.array(indices).astype(bool)
+    indices = list(indices) + [True] * int(len(string) - len(substring))
+    indices = np.array(indices)
+    return index_string(string, indices)
+
+
+def parse_axes(string, axes):
+    np_axes = np.array(axes)
+    string_a = index_string(string, np_axes[:, 0]) 
+    string_b = index_string(string, np_axes[:, 1])
+    string_a = ein_string(string, string_a)
+    string_b = ein_string(string, string_b)
+    return string_a + string_b
+
+
+def tensordot(tensor, weights, axes):
+    max_dims = max(tensor.dim(), weights.dim())
+    string = axis_string(max_dims)
+    string_c = ''.join(sorted(set(parse_axes(string, axes))))
+    string_a, string_b = string[:tensor.dim()], string[:weights.dim()]
+    string = string_a + ',' + string_b + '->' + string_c
+    return torch.einsum(string, (tensor, weights))
+    
