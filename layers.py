@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as fn
 
 import numpy as np
-from functools import partial
 
 
 def axis_string(max_dims):
@@ -62,12 +61,27 @@ def set_padding(in_dim, out_dim, ker_size, stride, mode):
     return padding
 
 
-def reshape(tensor, shape):
-    return torch.Tensor.view(tensor, shape)
+def slice_tensor(tensor, i, j, ker_width):
+    slices = [slice(None)] * tensor.dim()
+    slices[-2] = slice(i, i + ker_width)
+    slices[-1] = slice(j, j + ker_width)
+    return(tensor[slices])
     
 
+def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
+    tensor = fn.pad(tensor, padding, mode='constant')
+    a, b = tensor.size(0), tensor.size(1)
+    new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
+    tensor = tensor.as_strided(new_shape, (1, 1, stride, stride, 1, 1))
+    tensor_product = torch.einsum('abcdef,efbhi->ahicd', (tensor, weights))
+    return tensor_product
+
+
 class Convolve(nn.Module):
-    def __init__(self, in_maps=1, out_maps=1, ker_size=3, stride=1, mode='none'):
+    def __init__(self, in_maps=1, out_maps=1,
+                 ker_size=3, stride=1, mode='none'):
         super(Convolve, self).__init__()
 
         self.in_maps = in_maps
@@ -179,9 +193,9 @@ class DownCaps(nn.Module):
         M = torch.randn(self.ker_height,
                         self.ker_width,
                         prev_dim,
-                        cur_dim,
-                        self.num_atoms)
-        tensor = mat_conv_II(tensor, M, self.ker_width,
+                        self.num_atoms,
+                        cur_dim)
+        tensor = mat_conv(tensor, M, self.ker_width,
                              self.stride, tensor.size(-1),
                              int(tensor.size(-1) / self.stride))
         return tensor, M
@@ -194,36 +208,3 @@ def test_shape():
     operation_two = DownCaps(16, 16, 5, 'half', 2, 256 * 256, 1, 2)
     z = operation_two(y)
     return z
-
-
-def slice_tensor(tensor, i, j, ker_width):
-    slices = [slice(None)] * tensor.dim()
-    slices[-2] = slice(i, i + ker_width)
-    slices[-1] = slice(j, j + ker_width)
-    return(tensor[slices])
-
-
-def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
-    pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
-    tensor = fn.pad(tensor, padding, mode='constant')
-    rng = in_dim - ker_width + 1 + 2 * pad    
-    tensor_product = torch.stack([torch.stack(
-        [torch.einsum('abcd,dcbef->aef',
-                      (slice_tensor(tensor, i, j, ker_width),
-                       weights)) for i in range(rng)])
-                                for j in range(rng)])
-    tensor_product = tensor_product.squeeze()
-    return tensor_product.transpose(0, 2).transpose(1, 3)
-    
-
-def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
-    print(ker_width, stride, in_dim, out_dim)
-    pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
-    tensor = fn.pad(tensor, padding, mode='constant')
-    a, b = tensor.size(0), tensor.size(1)
-    new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
-    tensor = tensor.as_strided(new_shape, (1, 1, stride, stride, 1, 1))
-    tensor_product = torch.einsum('abcdef,efbhi->ahicd', (tensor, weights))
-    return tensor_product
