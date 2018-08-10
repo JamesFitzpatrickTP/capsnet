@@ -181,8 +181,9 @@ class DownCaps(nn.Module):
                         prev_dim,
                         cur_dim,
                         self.num_atoms)
-        tensor = mat_conv(tensor, M, self.ker_width, self.stride,
-                          tensor.size(-1), tensor.size(-1) / self.stride)
+        tensor = mat_conv_II(tensor, M, self.ker_width,
+                             self.stride, tensor.size(-1),
+                             int(tensor.size(-1) / self.stride))
         return tensor, M
 
 
@@ -215,5 +216,14 @@ def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
     tensor_product = tensor_product.squeeze()
     return tensor_product.transpose(0, 2).transpose(1, 3)
     
-    
-    
+
+def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
+    print(ker_width, stride, in_dim, out_dim)
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
+    tensor = fn.pad(tensor, padding, mode='constant')
+    a, b = tensor.size(0), tensor.size(1)
+    new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
+    tensor = tensor.as_strided(new_shape, (1, 1, stride, stride, 1, 1))
+    tensor_product = torch.einsum('abcdef,efbhi->ahicd', (tensor, weights))
+    return tensor_product
