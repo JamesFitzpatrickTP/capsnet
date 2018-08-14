@@ -27,7 +27,7 @@ def ein_string(string, substring):
 
 def parse_axes(string, axes):
     np_axes = np.array(axes)
-    string_a = index_string(string, np_axes[:, 0]) 
+    string_a = index_string(string, np_axes[:, 0])
     string_b = index_string(string, np_axes[:, 1])
     string_a = ein_string(string, string_a)
     string_b = ein_string(string, string_b)
@@ -40,7 +40,6 @@ def tensordot(tensor, weights, axes):
     string_c = ''.join(sorted(set(parse_axes(string, axes))))
     string_a, string_b = string[:tensor.dim()], string[:weights.dim()]
     string = string_a + ',' + string_b + '->' + string_c
-    print(string)
     return torch.einsum(string, (tensor, weights))
 
 
@@ -73,9 +72,11 @@ def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
     padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
     tensor = fn.pad(tensor, padding, mode='constant')
     a, b = tensor.size(0), tensor.size(1)
+    i_str, j_str, k_str, l_str = tensor.stride()
     new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
-    tensor = tensor.as_strided(new_shape, (1, 1, stride, stride, 1, 1))
-    tensor_product = torch.einsum('abcdef,efbhi->ahicd', (tensor, weights))
+    tensor = tensor.as_strided(new_shape, (i_str, j_str, k_str + stride - 1,
+                                           l_str, k_str + stride - 1, l_str))
+    tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
     return tensor_product
 
 
@@ -190,21 +191,58 @@ class DownCaps(nn.Module):
 
     def routing(self, tensor, tensors):
         prev_dim, cur_dim = tensor.size(1), tensors.size(1)
-        M = torch.randn(self.ker_height,
-                        self.ker_width,
-                        prev_dim,
-                        self.num_atoms,
-                        cur_dim)
+        M = torch.rand(self.ker_height,
+                       self.ker_width,
+                       prev_dim,
+                       self.num_atoms,
+                       cur_dim)
         tensor = mat_conv(tensor, M, self.ker_width,
-                             self.stride, tensor.size(-1),
-                             int(tensor.size(-1) / self.stride))
+                          self.stride, tensor.size(-1),
+                          int(tensor.size(-1) / self.stride))
         return tensor, M
 
 
-def test_shape():
-    x = torch.tensor(np.zeros((1, 1, 512, 512))).float()
+def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
+    tensor = fn.pad(tensor, padding, mode='constant')
+    rng = in_dim - ker_width + 1 + 2 * pad
+    tensor_product = torch.stack([torch.stack(
+        [torch.einsum('abcd,dcbef->aef',
+                      (slice_tensor(tensor, i, j, ker_width),
+                       weights)) for i in range(rng)])
+                                  for j in range(rng)])
+    tensor_product = tensor_product.squeeze()
+    return tensor_product
+
+
+def test_shape(in_tensor):
     operation_one = Convolve(1, 16, 5, 1, 'same')
-    y = operation_one(x)
-    operation_two = DownCaps(16, 16, 5, 'half', 2, 256 * 256, 1, 2)
+    y = operation_one(in_tensor)
+    operation_two = DownCaps(16, 16, 5, 'same', 1, 256 * 256, 1, 2)
     z = operation_two(y)
     return z
+
+
+def rolling_window_lastaxis(a, window):
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+
+
+def rolling_window(a, window):
+    if not hasattr(window, '__iter__'):
+        return rolling_window_lastaxis(a, window)
+    for i, win in enumerate(window):
+        if win > 1:
+            a = a.swapaxes(i, -1)
+            a = rolling_window_lastaxis(a, win)
+            a = a.swapaxes(-2, i)
+    return a
+
+
+# Also need to sum over the previous atom dimension
+
+# Next, do routing of the logits
+
+# Then construct more descending layers
