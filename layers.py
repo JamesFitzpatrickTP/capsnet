@@ -202,43 +202,12 @@ class DownCaps(nn.Module):
         return tensor, M
 
 
-def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
-    pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
-    tensor = fn.pad(tensor, padding, mode='constant')
-    rng = in_dim - ker_width + 1 + 2 * pad
-    tensor_product = torch.stack([torch.stack(
-        [torch.einsum('abcd,dcbef->aef',
-                      (slice_tensor(tensor, i, j, ker_width),
-                       weights)) for i in range(rng)])
-                                  for j in range(rng)])
-    tensor_product = tensor_product.squeeze()
-    return tensor_product
-
-
 def test_shape(in_tensor):
     operation_one = Convolve(1, 16, 5, 1, 'same')
     y = operation_one(in_tensor)
     operation_two = DownCaps(16, 16, 5, 'same', 1, 256 * 256, 1, 2)
     z = operation_two(y)
     return z
-
-
-def rolling_window_lastaxis(a, window):
-    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
-    strides = a.strides + (a.strides[-1],)
-    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
-
-
-def rolling_window(a, window):
-    if not hasattr(window, '__iter__'):
-        return rolling_window_lastaxis(a, window)
-    for i, win in enumerate(window):
-        if win > 1:
-            a = a.swapaxes(i, -1)
-            a = rolling_window_lastaxis(a, win)
-            a = a.swapaxes(-2, i)
-    return a
 
 
 # Also need to sum over the previous atom dimension
