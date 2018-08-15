@@ -181,10 +181,7 @@ class DownCaps(nn.Module):
                 mode=self.mode) for _ in range(num_atoms)])
 
     def forward(self, tensor):
-        tensors = [conv(tensor) for conv in self.convs]
-        tensors = torch.stack(tensors, dim=1)
-        tensors = torch.Tensor.squeeze(tensors)
-        votes, M = self.routing(tensor, tensors)
+        votes, M = self.routing(tensor)
         votes = votes.permute(0, 3, 4, 1, 2)
         return self.routy(votes, self.num_routes)
 
@@ -194,13 +191,12 @@ class DownCaps(nn.Module):
         denominator = (1 + norm ** 2) * norm
         return numerator / denominator
 
-    def routing(self, tensor, tensors):
-        prev_dim, cur_dim = tensor.size(1), tensors.size(1)
+    def routing(self, tensor):
         M = torch.rand(self.ker_height,
                        self.ker_width,
-                       prev_dim,
+                       self.in_maps,
                        self.num_atoms,
-                       cur_dim)
+                       self.out_maps)
         tensor = mat_conv(tensor, M, self.ker_width,
                           self.stride, tensor.size(-1),
                           int(tensor.size(-1) / self.stride))
@@ -217,17 +213,13 @@ class DownCaps(nn.Module):
         return preds
             
 
-
 def test_shape(in_tensor):
     operation_one = Convolve(1, 16, 5, 1, 'same')
-    y = operation_one(in_tensor)
+    a = operation_one(in_tensor)
     operation_two = DownCaps(16, 16, 5, 'same', 2, 256 * 256, 1, 2)
-    z = operation_two(y)
-    return z
-
-
-# Also need to sum over the previous atom dimension
-
-# Next, do routing of the logits
-
-# Then construct more descending layers
+    b = operation_two(a)
+    operation_three = DownCaps(16, 16, 5, 'same', 1, 256 * 256, 3, 4)
+    c = operation_three(b)
+    operation_four = DownCaps(16, 32, 5, 'same', 2, 128 * 128, 3, 8)
+    d = operation_four(c)
+    return d
