@@ -185,10 +185,11 @@ class DownCaps(nn.Module):
         tensors = torch.stack(tensors, dim=1)
         tensors = torch.Tensor.squeeze(tensors)
         votes, M = self.routing(tensor, tensors)
-        return votes
+        votes = votes.permute(0, 3, 4, 1, 2)
+        return self.routy(votes, self.num_routes)
 
-    def squash(self, tensor):
-        norm = torch.norm(tensor, dim=0)
+    def squash(self, tensor, dim=0):
+        norm = torch.norm(tensor, dim=dim)
         numerator = (norm ** 2) * tensor
         denominator = (1 + norm ** 2) * norm
         return numerator / denominator
@@ -204,6 +205,17 @@ class DownCaps(nn.Module):
                           self.stride, tensor.size(-1),
                           int(tensor.size(-1) / self.stride))
         return tensor, M
+
+    def routy(self, votes, num_routes=1):
+        a, b, c, d, e = votes.shape
+        logits = torch.zeros((a, b, d, e)).float()
+        for routes in range(num_routes):
+            logits = fn.softmax(logits, dim=0)
+            preds = torch.einsum('abcde,abde->bcde', (votes, logits))
+            preds = self.squash(preds, dim=0)
+            logits += torch.einsum('abcde,bcde->abde', (votes, preds))
+        return preds
+            
 
 
 def test_shape(in_tensor):
