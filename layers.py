@@ -74,8 +74,12 @@ def mat_conv(tensor, weights, ker_width, stride, in_dim, out_dim):
     a, b = tensor.size(0), tensor.size(1)
     i_str, j_str, k_str, l_str = tensor.stride()
     new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
-    tensor = tensor.as_strided(new_shape, (i_str, j_str, k_str + stride - 1,
-                                           l_str, k_str + stride - 1, l_str))
+    tensor = tensor.as_strided(new_shape,
+                               (i_str, j_str,
+                                k_str * stride,
+                                l_str * stride,
+                                k_str * stride,
+                                l_str * stride))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
     return tensor_product
 
@@ -205,7 +209,7 @@ class DownCaps(nn.Module):
 def test_shape(in_tensor):
     operation_one = Convolve(1, 16, 5, 1, 'same')
     y = operation_one(in_tensor)
-    operation_two = DownCaps(16, 16, 5, 'same', 1, 256 * 256, 1, 2)
+    operation_two = DownCaps(16, 16, 5, 'same', 2, 256 * 256, 1, 2)
     z = operation_two(y)
     return z
 
