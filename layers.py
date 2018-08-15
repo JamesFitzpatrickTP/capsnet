@@ -220,6 +220,13 @@ def test_shape(in_tensor):
     b = operation_two(a)
     operation_three = DownCaps(16, 16, 5, 'same', 1, 256 * 256, 3, 4)
     c = operation_three(b)
-    operation_four = DownCaps(16, 32, 5, 'same', 2, 128 * 128, 3, 8)
+    operation_four = DownCaps(16, 32, 5, 'same', 2, 128 * 128, 3, 4)
     d = operation_four(c)
-    return d
+    operation_five = DownCaps(32, 32, 5, 'same', 1, 128 * 128, 3, 8)
+    e = operation_five(d)
+    operation_six = DownCaps(32, 64, 5, 'same', 2, 64 * 64, 3, 8)
+    f = operation_six(e)
+    operation_seven = DownCaps(64, 64, 5, 'same', 1, 64 * 64, 3, 8)
+    g = operation_seven(f)
+     
+    return g
