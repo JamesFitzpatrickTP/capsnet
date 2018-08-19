@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as fn
 import numpy as np
 
 
@@ -85,7 +86,7 @@ def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
 def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
     a, b, c, d = tuple(tensor.size())
     new_tensor = torch.zeros((a, b, int(c * 2), int(d * 2)))
-    new_tensor[:,:,::2,::2] = tensor
+    new_tensor[:,:,::2,::2] = new_tensor[:,:,::2,::2].clone() + tensor
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
     padding = (pad, pad) * 2 + (0, 0) * (new_tensor.dim() - 2)
     tensor = fn.pad(new_tensor, padding, mode='constant')
