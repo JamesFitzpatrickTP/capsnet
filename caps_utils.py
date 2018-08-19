@@ -1,93 +1,102 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import load_mnist
 
 
-def squash(vector, epsilon=1e-4):
-    squared_norm = (vector ** 2).sum(-1, keepdim=True)
-    normed_vector = vector / (torch.sqrt(squared_norm) + epsilon)
-    prefactor =  squared_norm / (1 + squared_norm)
-    return prefactor * normed_vector
+def axis_string(max_dims):
+    strings = (chr(97 + i) for i in range(max_dims))
+    string = ''.join(strings)
+    return string
 
 
-def torch_tensor(shape):
-    return torch.tensor(np.random.randn(shape)).float()
+def index_string(string, indices):
+    string = np.array(list(string))
+    string = string[indices]
+    return ''.join(string)
 
 
-def convolve(in_maps, out_maps, kernel_size, stride=1, padding=1):
-    return nn.Conv2d(
-        in_channels=in_maps,
-        out_channels=out_maps,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=padding)
+def ein_string(string, substring):
+    indices = [(substring[i] in string) for i in range(len(substring))]
+    indices = ~ np.array(indices).astype(bool)
+    indices = list(indices) + [True] * int(len(string) - len(substring))
+    indices = np.array(indices)
+    return index_string(string, indices)
 
 
-class ConvConv(nn.Module):
-    def __init__(self, in_maps, out_maps, kernel_size, strides):
-        super(ConvConv, self).__init__()
-        
-        self.in_maps = in_maps
-        self.out_maps = out_maps
-        self.kernel_size = kernel_size
-        self.strides = strides
-
-        self.conv_a = convolve(self.in_maps, self.out_maps, self.kernel_size, self.strides[0])
-        self.conv_b = convolve(self.out_maps, self.out_maps, self.kernel_size, self.strides[1])
-        
-    def forward(self, tensor):
-        print(tensor.shape)
-        tensor = nn.functional.relu(self.conv_a(tensor))
-        print(tensor.shape)
-        tensor = nn.functional.relu(self.conv_b(tensor))
-        print(tensor.shape)
-        return tensor
+def parse_axes(string, axes):
+    np_axes = np.array(axes)
+    string_a = index_string(string, np_axes[:, 0])
+    string_b = index_string(string, np_axes[:, 1])
+    string_a = ein_string(string, string_a)
+    string_b = ein_string(string, string_b)
+    return string_a + string_b
 
 
-class CapsLayer(nn.Module):
-    def __init__(self, in_dim=None, out_dim=None, in_num=None, out_num=None):
-        super(CapsLayer, self).__init__()
+def tensordot(tensor, weights, axes):
+    max_dims = max(tensor.dim(), weights.dim())
+    string = axis_string(max_dims)
+    string_c = ''.join(sorted(set(parse_axes(string, axes))))
+    string_a, string_b = string[:tensor.dim()], string[:weights.dim()]
+    string = string_a + ',' + string_b + '->' + string_c
+    return torch.einsum(string, (tensor, weights))
 
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.in_num = in_num
-        self.out_num = out_num
 
-        self.squash = squash
+def compute_padding(in_dim, out_dim, ker_size, stride):
+    numerator = ker_size - in_dim + stride * (out_dim - 1)
+    return int(numerator / 2)
 
-    def flatten(self, tensor, dim):
-        batch_size = tensor.shape[0]
-        tensor = tensor.view(batch_size, -1, dim)
-        return tensor
 
-    def forward(self, tensor):
-        if self.in_dim is None:
-            tensor = self.flatten(tensor, self.out_dim)
-            print(tensor.shape)
-        else:
-            self.nums = self.in_num * self.out_num
-            self.weights = torch_tensor((self.in_dim, self.out_dim, self.out_num))
-            
-        return tensor
+def set_padding(in_dim, out_dim, ker_size, stride, mode):
+    if not isinstance(mode, str):
+        raise TypeError("Padding must be a string of same, half or none")
+    if mode == 'same':
+        padding = compute_padding(in_dim, in_dim, ker_size, stride)
+    elif mode == 'half':
+        padding = compute_padding(in_dim, in_dim / 2, ker_size, stride) + 1
+    else:
+        padding = 0
+    return padding
+
+
+def slice_tensor(tensor, i, j, ker_width):
+    slices = [slice(None)] * tensor.dim()
+    slices[-2] = slice(i, i + ker_width)
+    slices[-1] = slice(j, j + ker_width)
+    return(tensor[slices])
     
 
-class CapsNet(nn.Module):
-    def __init__(self, in_maps, out_maps, kernel_size, strides):
-        super(CapsNet, self).__init__()
+def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
+    tensor = fn.pad(tensor, padding, mode='constant')
+    a, b = tensor.size(0), tensor.size(1)
+    i_str, j_str, k_str, l_str = tensor.stride()
+    new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
+    tensor = tensor.as_strided(new_shape,
+                               (i_str, j_str,
+                                int(k_str * stride),
+                                int(l_str),
+                                int(k_str * stride),
+                                int(l_str)))
+    tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
+    return tensor_product
 
-        self.in_maps = in_maps
-        self.out_maps = out_maps
-        self.kernel_size = kernel_size
-        self.strides = strides
 
-        self.conv = ConvConv(self.in_maps, self.out_maps, self.kernel_size, self.strides)
-        self.in_caps = CapsLayer(None, 8)
-        self.out_caps = CapsLayer(8, 16, 3, 2)
-                
-    def forward(self, tensor):
-        tensor = nn.functional.relu(self.conv(tensor))
-        tensor = self.in_caps(tensor)
-        tensor = self.out_caps(tensor)
-                            
-        return tensor
+def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
+    a, b, c, d = tuple(tensor.size())
+    new_tensor = torch.zeros((a, b, int(c * 2), int(d * 2)))
+    new_tensor[:,:,::2,::2] = tensor
+    pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    padding = (pad, pad) * 2 + (0, 0) * (new_tensor.dim() - 2)
+    tensor = fn.pad(new_tensor, padding, mode='constant')
+    a, b = new_tensor.size(0), new_tensor.size(1)
+    i_str, j_str, k_str, l_str = new_tensor.stride()
+    new_shape = (a, b) + (out_dim * 2, out_dim * 2, ker_width, ker_width)
+    new_tensor = new_tensor.as_strided(new_shape,
+                               (i_str, j_str,
+                                int(k_str * stride),
+                                int(l_str * stride),
+                                int(k_str * stride),
+                                int(l_str * stride)))
+    tensor_product = torch.einsum('abcdef,efbhi->acdhi', (new_tensor, weights))
+    return tensor_product
