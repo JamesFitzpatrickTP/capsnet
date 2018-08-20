@@ -67,9 +67,10 @@ class DownCaps(nn.Module):
         return self.routing(votes, self.num_routes)
 
     def squash(self, tensor, dim=0, epsilon=1e-4):
-        norm = torch.norm(tensor, dim=dim) + epsilon
-        numerator = (norm ** 2) * tensor
-        denominator = (1 + norm ** 2) * norm 
+        squared_norm = (tensor ** 2).sum(1, keepdim=True) + epsilon
+        norm = torch.sqrt(squared_norm)
+        numerator = squared_norm * tensor
+        denominator = (1 + squared_norm) * norm 
         return numerator / denominator
 
     def voting(self, tensor, weights):
@@ -126,9 +127,10 @@ class UpCaps(nn.Module):
         return self.routing(votes, self.num_routes)
 
     def squash(self, tensor, dim=0, epsilon=1e-4):
-        norm = torch.norm(tensor, dim=dim) + epsilon
-        numerator = (norm ** 2) * tensor
-        denominator = (1 + norm ** 2) * norm
+        squared_norm = (tensor ** 2).sum(1, keepdim=True) + epsilon
+        norm = torch.sqrt(squared_norm)
+        numerator = squared_norm * tensor
+        denominator = (1 + squared_norm) * norm 
         return numerator / denominator
 
     def voting(self, tensor, weights):
@@ -220,5 +222,5 @@ class TestNetwork(nn.Module):
         o = self.upsampling_three(n)
         p = self.capsuling_nine(torch.cat((a, o)))
         q = self.capsuling_ten(p)
-        print('Inference completed...')
-        return h,i,j,k,ll,m,n,o,p,q
+        
+        return q
