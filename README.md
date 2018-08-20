@@ -8,7 +8,7 @@ developed for capsules.
 
 ![CapsDiagram](https://raw.githubusercontent.com/JamesFitzpatrickTP/capsnet/master/CapsNet.PNG)
 
-Such a scheme, with fully-conencted capsule layers, is not feasible for large images. To deal with this, Lalonde proposed locally-restricted capsules, where a single weighting tensor would be used to 'convolve' over an input tensor to produce the new one. By 
+Such a scheme, with fully-connected capsule layers, is not feasible for large images. To deal with this, Lalonde proposed locally-restricted capsules, where a single weighting tensor would be used to 'convolve' over an input tensor to produce the new one. By 
 sharing the weights the number of parameters needed to produce a model for typical images can be reduced drastically. Normal convolutions
 rely on the Hadamard product:
 
