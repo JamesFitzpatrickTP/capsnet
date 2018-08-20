@@ -76,9 +76,9 @@ def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
     tensor = tensor.as_strided(new_shape,
                                (i_str, j_str,
                                 int(k_str * stride),
-                                int(l_str),
+                                int(l_str * stride),
                                 int(k_str * stride),
-                                int(l_str)))
+                                int(l_str * stride)))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
     return tensor_product
 
