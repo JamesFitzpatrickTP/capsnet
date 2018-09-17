@@ -68,8 +68,9 @@ def slice_tensor(tensor, i, j, ker_width):
 
 def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    pad = 1
     padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
-    tensor = fn.pad(tensor, padding, mode='constant')
+    tensor = fn.pad(tensor, padding, mode='constant', value=tensor.min())
     a, b = tensor.size(0), tensor.size(1)
     i_str, j_str, k_str, l_str = tensor.stride()
     new_shape = (a, b) + (out_dim, out_dim, ker_width, ker_width)
@@ -88,8 +89,9 @@ def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
     new_tensor = torch.zeros((a, b, int(c * 2), int(d * 2)))
     new_tensor[:,:,::2,::2] = new_tensor[:,:,::2,::2].clone() + tensor
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
+    pad = 1
     padding = (pad, pad) * 2 + (0, 0) * (new_tensor.dim() - 2)
-    tensor = fn.pad(new_tensor, padding, mode='constant')
+    tensor = fn.pad(new_tensor, padding, mode='constant', value=tensor.min())
     a, b = new_tensor.size(0), new_tensor.size(1)
     i_str, j_str, k_str, l_str = new_tensor.stride()
     new_shape = (a, b) + (out_dim * 2, out_dim * 2, ker_width, ker_width)
