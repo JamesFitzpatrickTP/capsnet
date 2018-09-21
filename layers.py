@@ -61,6 +61,8 @@ class UpCaps(nn.Module):
                                    self.num_atoms,
                                    self.out_maps).float() * 100
 
+        self.softmax = torch.nn.Softmax(dim=0)
+
     def forward(self, tensor):
         votes = self.voting(tensor, self.weights)
         votes = votes.permute(0, 3, 4, 1, 2)
@@ -84,7 +86,7 @@ class UpCaps(nn.Module):
         a, b, c, d, e = votes.shape
         logits = torch.zeros((a, b, d, e)).float()
         for routes in range(num_routes):
-            logits = fn.softmax(logits, dim=0)
+            # logits = self.softmax(logits)
             preds = torch.einsum('abcde,abde->bcde', (votes, logits))
             preds = self.squash(preds, dim=1)
             logits = logits + torch.einsum('abcde,bcde->abde', (votes, preds))
@@ -94,7 +96,7 @@ class UpCaps(nn.Module):
 class DownCaps(nn.Module):
     def __init__(self, in_maps, out_maps, ker_size, mode,
                  stride, num_caps, num_routes, num_atoms):
-        super(TestCaps, self).__init__()
+        super(DownCaps, self).__init__()
 
         self.in_maps = in_maps
         self.out_maps = out_maps
@@ -122,6 +124,8 @@ class DownCaps(nn.Module):
                                     self.num_atoms,
                                     self.out_maps)).float()
 
+        self.softmax = torch.nn.Softmax(dim=0)
+
     def forward(self, tensor):
         votes = self.voting(tensor, self.weights)
         votes = votes.permute(0, 3, 4, 1, 2)
@@ -145,10 +149,10 @@ class DownCaps(nn.Module):
         a, b, c, d, e = votes.shape
         logits = torch.zeros((a, b, d, e)).float()
         for routes in range(num_routes):
-            logits = fn.softmax(logits, dim=0)
+            # logits = self.softmax(logits)
             preds = torch.einsum('abcde,abde->bcde', (votes, logits))
             preds = self.squash(preds, dim=1)
-            logits = logits + torch.einsum('abcde,bcde->abde', (votes, preds))
+            logits = logits.clone() + torch.einsum('abcde,bcde->abde', (votes, preds))
         return preds    
 
 
@@ -184,18 +188,19 @@ class DownNetwork(nn.Module):
         g = self.capsuling_three(f)
         h = self.capsuling_four(g)
         print('Downsampling sum: ', h.sum())
-        i = self.upsampling_one(h)
-        j = self.capsuling_five(torch.cat((e, i)))
-        k = self.capsuling_six(j)
-        ll = self.upsampling_two(k)
-        m = self.capsuling_seven(torch.cat((c, ll)))
-        n = self.capsuling_eight(m)
-        o = self.upsampling_three(n)
-        p = self.capsuling_nine(torch.cat((a, o)))
-        q = self.capsuling_ten(p)
-        print('Upsampling sum: ', q.sum())
+        # i = self.upsampling_one(h)
+        # j = self.capsuling_five(torch.cat((e, i)))
+        # k = self.capsuling_six(j)
+        # ll = self.upsampling_two(k)
+        # m = self.capsuling_seven(torch.cat((c, ll)))
+        # n = self.capsuling_eight(m)
+        # o = self.upsampling_three(n)
+        # p = self.capsuling_nine(torch.cat((a, o)))
+        # q = self.capsuling_ten(p)
+        # print('Upsampling sum: ', q.sum())
         
-        squared_norm = (q ** 2).sum(1) + 1e-4
-        norm = torch.sqrt(squared_norm)
-
-        return torch.squeeze(norm)
+        # squared_norm = torch.sum(q ** 2, 1) + 1e-4
+        # norm = torch.sqrt(squared_norm)
+        # ret = torch.squeeze(norm)
+        
+        return h
