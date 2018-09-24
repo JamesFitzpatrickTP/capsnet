@@ -92,7 +92,7 @@ def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
     pad = 2
     padding = (pad, pad) * 2 + (0, 0) * (new_tensor.dim() - 2)
-    tensor = fn.pad(new_tensor, padding, mode='constant', value=tensor.min())
+    new_tensor = fn.pad(new_tensor, padding, mode='constant', value=tensor.min())
     a, b = new_tensor.size(0), new_tensor.size(1)
     i_str, j_str, k_str, l_str = new_tensor.stride()
     new_shape = (a, b) + (out_dim * 2, out_dim * 2, ker_width, ker_width)
