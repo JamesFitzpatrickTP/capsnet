@@ -82,7 +82,7 @@ def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
                                 int(l_str * stride)))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
     print('CapsuleConv Downscale: (Max) {} - (Median) {}'.format(tensor_product.max(), tensor_product.median()))
-    return tensor_product / tensor_product.max()
+    return tensor_product
 
 
 def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
@@ -104,4 +104,4 @@ def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
                                 int(l_str * stride)))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (new_tensor, weights))
     print('CapsuleConv Upscale: (Max) {} - (Median) {}'.format(tensor_product.max(), tensor_product.median()))
-    return tensor_product / tensor_product.max()
+    return tensor_product
