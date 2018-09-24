@@ -28,7 +28,7 @@ imgs = (imgs.vol - img_min) / img_dif
 labs = (labs.vol > 0.1).astype(int)
 
 model = layers.DownNetwork()
-optimiser = torch.optim.SGD(model.parameters(), lr=0.1)
+optimiser = torch.optim.Adam(model.parameters(), lr=0.1)
 criterion = torch.nn.MSELoss()
 
 
