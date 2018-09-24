@@ -217,4 +217,4 @@ class DownNetwork(nn.Module):
         q = self.capsuling_ten(p)
         print('Upsampling sum: ', q.sum())
 
-        return torch.nn.ReLU()(torch.squeeze(q))
+        return torch.squeeze(q)
