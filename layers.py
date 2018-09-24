@@ -59,14 +59,20 @@ class UpCaps(nn.Module):
                                    self.ker_width,
                                    self.in_maps,
                                    self.num_atoms,
-                                   self.out_maps).float() * 100
+                                   self.out_maps).float()
 
         self.softmax = torch.nn.Softmax(dim=0)
 
     def forward(self, tensor):
+        if torch.isnan(tensor.sum()):
+            print('NaN as input!')
         votes = self.voting(tensor, self.weights)
+        if torch.isnan(votes.sum()):
+            print('NaN after CapsuleConv!')
         votes = votes.permute(0, 3, 4, 1, 2)
         votes = self.routing(votes, self.num_routes)
+        if torch.isnan(votes.sum()):
+            print('NaN after Routing!')
         return votes
 
     def squash(self, tensor, dim=0, epsilon=1e-4):
@@ -87,6 +93,9 @@ class UpCaps(nn.Module):
         logits = torch.zeros((a, b, d, e)).float()
         for routes in range(num_routes):
             # logits = self.softmax(logits)
+            exps = torch.exp(logits)
+            sums = exps.sum(dim=1, keepdim=True)
+            logits = exps / sums
             preds = torch.einsum('abcde,abde->bcde', (votes, logits))
             preds = self.squash(preds, dim=1)
             logits = logits + torch.einsum('abcde,bcde->abde', (votes, preds))
@@ -127,9 +136,15 @@ class DownCaps(nn.Module):
         self.softmax = torch.nn.Softmax(dim=0)
 
     def forward(self, tensor):
+        if torch.isnan(tensor.sum()):
+            print('NaN as input!')
         votes = self.voting(tensor, self.weights)
+        if torch.isnan(votes.sum()):
+            print('NaN after CapsuleConv!')
         votes = votes.permute(0, 3, 4, 1, 2)
         votes = self.routing(votes, self.num_routes)
+        if torch.isnan(votes.sum()):
+            print('NaN after Routing!')
         return votes
 
     def squash(self, tensor, dim=0, epsilon=1e-4):
@@ -149,11 +164,14 @@ class DownCaps(nn.Module):
         a, b, c, d, e = votes.shape
         logits = torch.zeros((a, b, d, e)).float()
         for routes in range(num_routes):
+            exps = torch.exp(logits)
+            sums = exps.sum(dim=1, keepdim=True)
+            logits = exps / sums
             # logits = self.softmax(logits)
             preds = torch.einsum('abcde,abde->bcde', (votes, logits))
             preds = self.squash(preds, dim=1)
-            logits = logits.clone() + torch.einsum('abcde,bcde->abde', (votes, preds))
-        return preds    
+            logits = logits + torch.einsum('abcde,bcde->abde', (votes, preds))
+        return preds
 
 
 class DownNetwork(nn.Module):
@@ -168,15 +186,15 @@ class DownNetwork(nn.Module):
         self.downsampling_three = DownCaps(16, 32, 5, 'same', 2, 64 * 64, 3, 8)
         self.capsuling_three = DownCaps(32, 32, 5, 'same', 1, 64 * 64, 3, 8)
         self.capsuling_four = DownCaps(32, 16, 5, 'same', 1, 64 * 64, 3, 8)
-        self.upsampling_one = UpCaps(16, 16, 5, 'none', 1, 128 * 128, 3, 8)
+        self.upsampling_one = UpCaps(16, 16, 5, 'same', 1, 128 * 128, 3, 8)
         self.capsuling_five = DownCaps(16, 16, 5, 'same', 1, 128 * 128, 3, 8)
         self.capsuling_six = DownCaps(16, 16, 5, 'same', 1, 128 * 128, 3, 4)
-        self.upsampling_two = UpCaps(16, 8, 5, 'none', 1, 256 * 256, 3, 8)
+        self.upsampling_two = UpCaps(16, 8, 5, 'same', 1, 256 * 256, 3, 8)
         self.capsuling_seven = DownCaps(8, 8, 5, 'same', 1, 256 * 256, 3, 4)
         self.capsuling_eight = DownCaps(8, 8, 5, 'same', 1, 256 * 256, 3, 4)
-        self.upsampling_three = UpCaps(8, 8, 5, 'none', 1, 512 * 512, 3, 2)
+        self.upsampling_three = UpCaps(8, 8, 5, 'same', 1, 512 * 512, 3, 2)
         self.capsuling_nine = DownCaps(8, 8, 1, 'same', 1, 512 * 512, 3, 2)
-        self.capsuling_ten = DownCaps(8, 8, 5, 'same', 1, 512 * 512, 3, 1)
+        self.capsuling_ten = DownCaps(8, 1, 5, 'same', 1, 512 * 512, 3, 1)
 
     def forward(self, tensor):
         a = self.convolution_one(tensor)
@@ -188,19 +206,15 @@ class DownNetwork(nn.Module):
         g = self.capsuling_three(f)
         h = self.capsuling_four(g)
         print('Downsampling sum: ', h.sum())
-        # i = self.upsampling_one(h)
-        # j = self.capsuling_five(torch.cat((e, i)))
-        # k = self.capsuling_six(j)
-        # ll = self.upsampling_two(k)
-        # m = self.capsuling_seven(torch.cat((c, ll)))
-        # n = self.capsuling_eight(m)
-        # o = self.upsampling_three(n)
-        # p = self.capsuling_nine(torch.cat((a, o)))
-        # q = self.capsuling_ten(p)
-        # print('Upsampling sum: ', q.sum())
-        
-        # squared_norm = torch.sum(q ** 2, 1) + 1e-4
-        # norm = torch.sqrt(squared_norm)
-        # ret = torch.squeeze(norm)
-        
-        return h
+        i = self.upsampling_one(h)
+        j = self.capsuling_five(torch.cat((e, i)))
+        k = self.capsuling_six(j)
+        ll = self.upsampling_two(k)
+        m = self.capsuling_seven(torch.cat((c, ll)))
+        n = self.capsuling_eight(m)
+        o = self.upsampling_three(n)
+        p = self.capsuling_nine(torch.cat((a, o)))
+        q = self.capsuling_ten(p)
+        print('Upsampling sum: ', q.sum())
+
+        return torch.nn.ReLU()(torch.squeeze(q))
