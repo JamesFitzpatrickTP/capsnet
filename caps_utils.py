@@ -68,7 +68,7 @@ def slice_tensor(tensor, i, j, ker_width):
 
 def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    pad = 1
+    pad = 2
     padding = (pad, pad) * 2 + (0, 0) * (tensor.dim() - 2)
     tensor = fn.pad(tensor, padding, mode='constant', value=tensor.min())
     a, b = tensor.size(0), tensor.size(1)
@@ -81,7 +81,8 @@ def mat_conv_I(tensor, weights, ker_width, stride, in_dim, out_dim):
                                 int(k_str * stride),
                                 int(l_str * stride)))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (tensor, weights))
-    return tensor_product
+    print('CapsuleConv Downscale: (Max) {} - (Median) {}'.format(tensor_product.max(), tensor_product.median()))
+    return tensor_product / tensor_product.max()
 
 
 def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
@@ -89,7 +90,7 @@ def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
     new_tensor = torch.zeros((a, b, int(c * 2), int(d * 2)))
     new_tensor[:,:,::2,::2] = new_tensor[:,:,::2,::2].clone() + tensor
     pad = compute_padding(in_dim, out_dim, ker_width, stride)
-    pad = 1
+    pad = 2
     padding = (pad, pad) * 2 + (0, 0) * (new_tensor.dim() - 2)
     tensor = fn.pad(new_tensor, padding, mode='constant', value=tensor.min())
     a, b = new_tensor.size(0), new_tensor.size(1)
@@ -102,4 +103,5 @@ def mat_conv_II(tensor, weights, ker_width, stride, in_dim, out_dim):
                                 int(k_str * stride),
                                 int(l_str * stride)))
     tensor_product = torch.einsum('abcdef,efbhi->acdhi', (new_tensor, weights))
-    return tensor_product
+    print('CapsuleConv Upscale: (Max) {} - (Median) {}'.format(tensor_product.max(), tensor_product.median()))
+    return tensor_product / tensor_product.max()
